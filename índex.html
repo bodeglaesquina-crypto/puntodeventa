@@ -1,0 +1,324 @@
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CuadreDiario - Sistema de Gestión e Inventario</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para las gráficas de ventas y ganancias -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f4f6fb',
+                            100: '#e5eaf5',
+                            200: '#cbd6ed',
+                            500: '#3b66ac',
+                            600: '#2b4c8a',
+                            700: '#1e3563',
+                        },
+                        warmBg: '#f8fafc',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f6f8fa;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased h-screen flex flex-col overflow-hidden bg-[#f6f8fa]">
+
+    <!-- BARRA SUPERIOR (HEADER) -->
+    <header class="bg-white border-b border-slate-200 h-14 px-4 flex items-center justify-between shrink-0 z-20">
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 font-bold text-slate-800 text-lg tracking-tight">
+                <span class="w-3 h-3 bg-indigo-600 rounded-sm inline-block"></span>
+                <span>CuadreDiario</span>
+            </div>
+            <!-- Estado de Conexión -->
+            <div id="connectionStatus" class="flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1.5"></span>
+                <span id="statusText">En línea</span>
+            </div>
+            <div id="syncBadge" class="hidden text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-300 items-center gap-1 cursor-pointer" onclick="forceSync()">
+                <i class="fa-solid fa-arrows-rotate animate-spin text-amber-600"></i>
+                <span id="pendingCount">0</span> pendientes por sincronizar
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Tasa de Cambio BCV/Dólar -->
+            <div class="flex items-center bg-slate-100 hover:bg-slate-200/80 transition px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold cursor-pointer" onclick="openExchangeModal()">
+                <i class="fa-solid fa-coins text-slate-500 mr-2"></i>
+                <span>Bs/$ <span id="headerExchangeRate">893.22</span></span>
+                <i class="fa-solid fa-pen-to-square text-slate-400 ml-2 text-[10px]"></i>
+            </div>
+            <button onclick="toggleFullscreen()" class="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition">
+                <i class="fa-solid fa-expand text-sm"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- ALERTA OFFLINE NOTIFICATION -->
+    <div id="offlineBanner" class="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-800 flex items-center justify-between hidden">
+        <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-wifi-slash text-amber-600 text-sm"></i>
+            <span><strong>Sin conexión:</strong> Estos números se guardan localmente. Todo lo que registres se guardará y sincronizará automáticamente cuando regrese el WiFi.</span>
+        </div>
+        <button onclick="document.getElementById('offlineBanner').classList.add('hidden')" class="text-amber-600 hover:text-amber-900 font-bold">✕</button>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL CON SIDEBAR Y CONTENIDO -->
+    <div class="flex flex-1 overflow-hidden">
+
+        <!-- SIDEBAR DE NAVEGACIÓN -->
+        <aside class="w-56 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 py-4 px-2 select-none">
+            <div class="space-y-6">
+                <!-- Seccion Principal -->
+                <div>
+                    <p class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Principal</p>
+                    <nav class="space-y-1">
+                        <button onclick="switchTab('escritorio')" id="nav-escritorio" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-house w-5 text-center text-slate-400"></i>
+                            <span>Escritorio</span>
+                        </button>
+                        <button onclick="switchTab('vender')" id="nav-vender" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-cart-shopping w-5 text-center text-slate-400"></i>
+                            <span>Vender</span>
+                        </button>
+                        <button onclick="switchTab('inventario')" id="nav-inventario" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-box w-5 text-center text-slate-400"></i>
+                            <span>Inventario</span>
+                        </button>
+                        <button onclick="switchTab('clientes')" id="nav-clientes" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-users w-5 text-center text-slate-400"></i>
+                            <span>Clientes</span>
+                        </button>
+                        <button onclick="switchTab('reportes')" id="nav-reportes" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-chart-line w-5 text-center text-slate-400"></i>
+                            <span>Reportes</span>
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Seccion Gestión -->
+                <div>
+                    <p class="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Gestión</p>
+                    <nav class="space-y-1">
+                        <button onclick="switchTab('proveedores')" id="nav-proveedores" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-truck-field w-5 text-center text-slate-400"></i>
+                            <span>Proveedores</span>
+                        </button>
+                        <button onclick="switchTab('configuracion')" id="nav-configuracion" class="nav-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+                            <i class="fa-solid fa-gear w-5 text-center text-slate-400"></i>
+                            <span>Configuración</span>
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Footer Sidebar -->
+            <div class="pt-4 border-t border-slate-200 px-3 space-y-2 text-xs text-slate-500">
+                <div class="flex items-center space-x-2 cursor-pointer hover:text-slate-700">
+                    <i class="fa-solid fa-mobile-screen"></i>
+                    <span>Modo Offline Listo</span>
+                </div>
+                <div class="text-[10px] text-slate-400">v1.5.4 • CuadreDiario Business</div>
+            </div>
+        </aside>
+
+        <!-- ÁREA DE CONTENIDO DINÁMICO -->
+        <main class="flex-1 overflow-y-auto p-6 bg-[#f6f8fa]">
+
+            <!-- TAB 1: ESCRITORIO / DASHBOARD -->
+            <section id="tab-escritorio" class="tab-content space-y-6">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Escritorio</h1>
+                    <p class="text-xs text-slate-500 font-medium mt-0.5">
+                        <span id="currentDateFormatted">miércoles, 4 de noviembre de 2026</span> • Tasa: <span id="dashboardRateDisplay">893.22</span> Bs/$
+                    </p>
+                </div>
+
+                <!-- CARDS RESUMEN MATRIZ -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Ventas Hoy -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">VENTAS HOY</span>
+                            <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <i class="fa-solid fa-dollar-sign"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-800" id="dashVentasHoy">$0.00</div>
+                            <div class="text-xs font-semibold text-slate-400 mt-0.5" id="dashVentasHoyBs">Bs 0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- Utilidad Hoy -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">UTILIDAD HOY</span>
+                            <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <i class="fa-solid fa-arrow-trend-up"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-800" id="dashUtilidadHoy">$0.00</div>
+                            <div class="text-xs text-slate-400 mt-0.5"><span id="dashTransHoy">0</span> transacciones</div>
+                        </div>
+                    </div>
+
+                    <!-- Ventas Mes -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">VENTAS MES</span>
+                            <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                                <i class="fa-regular fa-calendar-days"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-800" id="dashVentasMes">$0.00</div>
+                            <div class="text-xs font-semibold text-slate-400 mt-0.5" id="dashVentasMesBs">Bs 0.00</div>
+                        </div>
+                    </div>
+
+                    <!-- Utilidad Mes -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">UTILIDAD MES</span>
+                            <div class="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+                                <i class="fa-solid fa-chart-pie"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-slate-800" id="dashUtilidadMes">$0.00</div>
+                            <div class="text-xs text-slate-400 mt-0.5"><span id="dashTransMes">0</span> transacciones</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN GRÁFICA DE VENTAS Y GANANCIAS -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-chart-column text-indigo-600"></i>
+                            <h3 class="font-bold text-slate-800 text-base">Gráficos de Rendimiento y Días Buenos</h3>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <select id="chartFilter" onchange="updateChart()" class="bg-slate-50 border border-slate-200 text-xs font-semibold rounded-lg px-3 py-1.5 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="7days">Últimos 7 días</option>
+                                <option value="month">Este Mes</option>
+                                <option value="bestDays">Días con Mayor Ganancia 📈</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="pt-4 h-72 w-full">
+                        <canvas id="mainSalesChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- TARJETAS SECUNDARIAS -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 text-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ventas Hoy</span>
+                        <div class="text-xl font-bold text-slate-800 mt-1" id="countVentasHoy">0</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 text-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fiados Hoy</span>
+                        <div class="text-xl font-bold text-slate-800 mt-1" id="countFiadosHoy">0</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 text-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Devoluciones</span>
+                        <div class="text-xl font-bold text-slate-800 mt-1">0</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 text-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stock Bajo</span>
+                        <div class="text-xl font-bold text-amber-600 mt-1" id="countStockBajo">0</div>
+                    </div>
+                </div>
+
+                <!-- TABLAS DE ALERTA RÁPIDA (STOCK BAJO & CUENTAS POR COBRAR) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Stock Bajo -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                        <div class="flex items-center space-x-2 text-amber-600 font-bold text-sm mb-3">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>Stock Bajo (<span id="stockBajoHeaderCount">0</span>)</span>
+                        </div>
+                        <div class="divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1" id="stockBajoList">
+                            <!-- Inyectado Dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Cuentas por Cobrar -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                        <div class="flex items-center space-x-2 text-slate-800 font-bold text-sm mb-3">
+                            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+                            <span>Cuentas por Cobrar</span>
+                        </div>
+                        <div class="divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1" id="debtsList">
+                            <!-- Inyectado Dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: VENDER (PUNTO DE VENTA POS) -->
+            <section id="tab-vender" class="tab-content hidden h-full flex flex-col lg:flex-row gap-6">
+                <!-- Izquierda: Catálogo y Buscador -->
+                <div class="flex-1 flex flex-col space-y-4 min-w-0">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="text" id="posSearchInput" oninput="renderPosProducts()" placeholder="Buscar producto por nombre o código..." 
+                            class="w-full pl-11 pr-12 py-3 bg-white border border-slate-200 rounded-xl shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                        <button class="absolute right-3 top-2.5 p-1.5 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-lg">
+                            <i class="fa-solid fa-camera"></i>
+                        </button>
+                    </div>
+
+                    <!-- Grid de Productos -->
+                    <div id="posProductsGrid" class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto flex-1 pr-1">
+                        <!-- Productos inyectados dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Derecha: Carrito de Compras -->
+                <div class="w-full lg:w-96 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between shrink-0 h-auto lg:h-full">
+                    <div>
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                                <i class="fa-solid fa-cart-shopping text-indigo-600"></i> Carrito de Venta
+                            </h3
